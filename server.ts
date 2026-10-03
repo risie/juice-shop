@@ -347,6 +347,16 @@ function configureApp (app: ReturnType<typeof express>, seq: typeof sequelize) {
   }))
   // vuln-code-snippet end resetPasswordMortyChallenge
 
+  /* Throttle credential submission. Uses the default key generator (req.ip,
+     resolved through the `trust proxy` setting above) rather than reading
+     X-Forwarded-For directly, which any client can forge. */
+  app.use('/rest/user/login', rateLimit({
+    windowMs: 5 * 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false
+  }))
+
   // vuln-code-snippet start changeProductChallenge
   /** Authorization **/
   /* Checks on JWT in Authorization header */ // vuln-code-snippet hide-line
