@@ -11,7 +11,6 @@ import { challenges, users } from '../data/datacache'
 import { BasketModel } from '../models/basket'
 import * as security from '../lib/insecurity'
 import { UserModel } from '../models/user'
-import * as models from '../models/index'
 import { type User } from '../data/types'
 import * as utils from '../lib/utils'
 
@@ -48,9 +47,9 @@ export function login () {
 
     verifyPreLoginChallenges(email, password)
 
-    const sql = `SELECT * FROM Users WHERE email = '${email}' AND password = '${passwordHash}' AND deletedAt IS NULL`
-
-    models.sequelize.query(sql, { model: UserModel, plain: true })
+    // The values travel to the database separately from the SQL, so a quote
+    // in the email is only ever a character. It can never end the string.
+    UserModel.findOne({ where: { email, password: passwordHash } })
       .then((authenticatedUser) => {
         const user = utils.queryResultToJson(authenticatedUser)
         if (user.data?.id && user.data.totpSecret !== '') {
