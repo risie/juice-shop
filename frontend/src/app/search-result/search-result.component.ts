@@ -95,10 +95,10 @@ export class SearchResultComponent implements OnDestroy, AfterViewInit {
         this.routerSubscription = this.router.events.subscribe(() => {
           this.filterTable()
         })
-        const challenge: string = this.route.snapshot.queryParams.challenge // vuln-code-snippet hide-start
+        const challenge: string = this.route.snapshot.queryParams.challenge
         if (challenge && this.route.snapshot.url.join('').match(/hacking-instructor/)) {
           this.startHackingInstructor(decodeURIComponent(challenge))
-        } // vuln-code-snippet hide-end
+        }
         this.cdRef.detectChanges()
       },
       error: (err) => { console.log(err) }
@@ -131,16 +131,15 @@ export class SearchResultComponent implements OnDestroy, AfterViewInit {
     }
   }
 
-  // vuln-code-snippet start localXssChallenge xssBonusChallenge
   filterTable () {
     let queryParam: string = this.route.snapshot.queryParams.q
     if (queryParam) {
       queryParam = queryParam.trim()
-      this.ngZone.runOutsideAngular(() => { // vuln-code-snippet hide-start
+      this.ngZone.runOutsideAngular(() => {
         this.io.socket().emit('verifyLocalXssChallenge', queryParam)
-      }) // vuln-code-snippet hide-end
+      })
       this.dataSource.filter = queryParam.toLowerCase()
-      this.searchValue = this.sanitizer.bypassSecurityTrustHtml(queryParam) // vuln-code-snippet vuln-line localXssChallenge xssBonusChallenge
+      this.searchValue = this.sanitizer.bypassSecurityTrustHtml(queryParam)
       if (this.gridDataSourceSubscription) {
         this.gridDataSourceSubscription.unsubscribe()
       }
@@ -157,7 +156,6 @@ export class SearchResultComponent implements OnDestroy, AfterViewInit {
       this.emptyState = false
     }
   }
-  // vuln-code-snippet end localXssChallenge xssBonusChallenge
 
   private setupResponsivePageSize () {
     const grid = this.elRef.nativeElement.querySelector('.products-grid')
