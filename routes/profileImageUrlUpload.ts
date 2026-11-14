@@ -4,6 +4,8 @@
  */
 
 import fs from 'node:fs'
+import net from 'node:net'
+import dns from 'node:dns/promises'
 import { Readable } from 'node:stream'
 import { finished } from 'node:stream/promises'
 import { type Request, type Response, type NextFunction } from 'express'
@@ -20,6 +22,34 @@ function imageExtensionOf (url: string) {
   return IMAGE_EXTENSIONS.includes(extension) ? extension : 'jpg'
 }
 
+// Places only the server can reach: itself, the private network and the
+// cloud metadata service on 169.254.169.254.
+const internalAddresses = new net.BlockList()
+internalAddresses.addSubnet('0.0.0.0', 8)
+internalAddresses.addSubnet('127.0.0.0', 8)
+internalAddresses.addSubnet('10.0.0.0', 8)
+internalAddresses.addSubnet('172.16.0.0', 12)
+internalAddresses.addSubnet('192.168.0.0', 16)
+internalAddresses.addSubnet('169.254.0.0', 16)
+internalAddresses.addAddress('::', 'ipv6')
+internalAddresses.addAddress('::1', 'ipv6')
+internalAddresses.addSubnet('fc00::', 7, 'ipv6')
+internalAddresses.addSubnet('fe80::', 10, 'ipv6')
+
+// The URL text proves nothing: any hostname can point at an internal
+// address. So we resolve the name and judge where it really leads.
+async function isPublicHttpUrl (rawUrl: unknown) {
+  if (typeof rawUrl !== 'string' || !URL.canParse(rawUrl)) return false
+
+  const url = new URL(rawUrl)
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return false
+
+  const hostname = url.hostname.replace(/^\[|\]$/g, '')
+  const addresses = await dns.lookup(hostname, { all: true }).catch(() => [])
+  return addresses.length > 0 && addresses.every(({ address, family }) =>
+    !internalAddresses.check(address, family === 6 ? 'ipv6' : 'ipv4'))
+}
+
 export function profileImageUrlUpload () {
   return async (req: Request, res: Response, next: NextFunction) => {
     const imageUrl = req.body.imageUrl
@@ -34,8 +64,14 @@ export function profileImageUrlUpload () {
       }
       const userId = loggedInUser.data.id
 
+      if (!(await isPublicHttpUrl(imageUrl))) {
+        res.status(400).send('Image URL must be a public http(s) address.')
+        return
+      }
+
       try {
-        const response = await fetch(imageUrl)
+        // A public URL may still answer with a redirect that points inside.
+        const response = await fetch(imageUrl, { redirect: 'error' })
         if (!response.ok || !response.body) {
           throw new Error('url returned a non-OK status code or an empty body')
         }
