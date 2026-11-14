@@ -131,12 +131,9 @@ export const redirectAllowlist = new Set([
 ])
 
 export const isRedirectAllowed = (url: string) => {
-  for (const allowedUrl of redirectAllowlist) {
-    if (url.includes(allowedUrl)) {
-      return true
-    }
-  }
-  return false
+  // Exact match. "Contains an allowed URL" is true for
+  // https://evil.example/?x=https://github.com/juice-shop/juice-shop too.
+  return redirectAllowlist.has(url)
 }
 // vuln-code-snippet end redirectCryptoCurrencyChallenge redirectChallenge
 
