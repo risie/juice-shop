@@ -6,26 +6,25 @@
 import { type Request, type Response, type NextFunction } from 'express'
 import { ProductModel } from '../models/product'
 import { BasketModel } from '../models/basket'
-import * as challengeUtils from '../lib/challengeUtils'
-
 import * as utils from '../lib/utils'
 import * as security from '../lib/insecurity'
-import { challenges } from '../data/datacache'
 
 export function retrieveBasket () {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       const basketId = req.params.id
 
-      const basket = await BasketModel.findOne({
-        where: { id: basketId },
-        include: [{ model: ProductModel, paranoid: false, as: 'Products' }]
-      })
+      const user = security.authenticatedUsers.from(req)
+      if (!user) {
+        res.status(401).json({ status: 'error', message: 'Please log in again.' })
+        return
+      }
 
-      /* jshint eqeqeq:false */
-      challengeUtils.solveIf(challenges.basketAccessChallenge, () => {
-        const user = security.authenticatedUsers.from(req)
-        return user && basketId && basketId !== 'undefined' && basketId !== 'null' && basketId !== 'NaN' && user.bid && user?.bid != parseInt(basketId, 10) // eslint-disable-line eqeqeq
+      // The id comes from the URL, the owner comes from the session.
+      // Somebody else's basket simply is not found.
+      const basket = await BasketModel.findOne({
+        where: { id: basketId, UserId: user.data.id },
+        include: [{ model: ProductModel, paranoid: false, as: 'Products' }]
       })
 
       if (((basket?.Products) != null) && basket.Products.length > 0) {
