@@ -4,6 +4,7 @@
  */
 import { type Request, type Response, type NextFunction } from 'express'
 import config from 'config'
+import { z } from 'zod'
 
 import * as challengeUtils from '../lib/challengeUtils'
 import { challenges, users } from '../data/datacache'
@@ -13,6 +14,11 @@ import { UserModel } from '../models/user'
 import * as models from '../models/index'
 import { type User } from '../data/types'
 import * as utils from '../lib/utils'
+
+const LoginSchema = z.object({
+  email: z.email().max(254),
+  password: z.string().max(128)
+})
 
 export function login () {
   function afterLogin (user: User, res: Response, next: NextFunction) {
@@ -29,8 +35,15 @@ export function login () {
   }
 
   return (req: Request, res: Response, next: NextFunction) => {
-    const email = req.body.email || ''
-    const password = req.body.password || ''
+    // Parse the body once, at the edge. Anything that is not an email address
+    // and a password fails like a wrong password, so the response gives
+    // nothing away.
+    const credentials = LoginSchema.safeParse(req.body)
+    if (!credentials.success) {
+      res.status(401).send(res.__('Invalid email or password.'))
+      return
+    }
+    const { email, password } = credentials.data
     const passwordHash = security.hash(password)
 
     verifyPreLoginChallenges(email, password)
