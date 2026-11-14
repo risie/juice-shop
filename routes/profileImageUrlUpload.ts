@@ -13,36 +13,48 @@ import { UserModel } from '../models/user'
 import * as utils from '../lib/utils'
 import logger from '../lib/logger'
 
+const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'svg', 'gif']
+
+function imageExtensionOf (url: string) {
+  const extension = url.split('.').slice(-1)[0].toLowerCase()
+  return IMAGE_EXTENSIONS.includes(extension) ? extension : 'jpg'
+}
+
 export function profileImageUrlUpload () {
   return async (req: Request, res: Response, next: NextFunction) => {
-    if (req.body.imageUrl !== undefined) {
-      const url = req.body.imageUrl
-      if (url.match(/(.)*solve\/challenges\/server-side(.)*/) !== null) req.app.locals.abused_ssrf_bug = true
+    const imageUrl = req.body.imageUrl
+
+    if (imageUrl !== undefined) {
+      if (imageUrl.match(/(.)*solve\/challenges\/server-side(.)*/) !== null) req.app.locals.abused_ssrf_bug = true
+
       const loggedInUser = security.authenticatedUsers.get(req.cookies.token)
-      if (loggedInUser) {
-        try {
-          const response = await fetch(url)
-          if (!response.ok || !response.body) {
-            throw new Error('url returned a non-OK status code or an empty body')
-          }
-          const ext = ['jpg', 'jpeg', 'png', 'svg', 'gif'].includes(url.split('.').slice(-1)[0].toLowerCase()) ? url.split('.').slice(-1)[0].toLowerCase() : 'jpg'
-          const fileStream = fs.createWriteStream(`frontend/dist/frontend/assets/public/images/uploads/${loggedInUser.data.id}.${ext}`, { flags: 'w' })
-          await finished(Readable.fromWeb(response.body as any).pipe(fileStream))
-          const user = await UserModel.findByPk(loggedInUser.data.id)
-          await user?.update({ profileImage: `/assets/public/images/uploads/${loggedInUser.data.id}.${ext}` })
-        } catch (error) {
-          try {
-            const user = await UserModel.findByPk(loggedInUser.data.id)
-            await user?.update({ profileImage: url })
-            logger.warn(`Error retrieving user profile image: ${utils.getErrorMessage(error)}; using image link directly`)
-          } catch (error) {
-            next(error)
-            return
-          }
-        }
-      } else {
+      if (!loggedInUser) {
         next(new Error('Blocked illegal activity by ' + req.socket.remoteAddress))
         return
+      }
+      const userId = loggedInUser.data.id
+
+      try {
+        const response = await fetch(imageUrl)
+        if (!response.ok || !response.body) {
+          throw new Error('url returned a non-OK status code or an empty body')
+        }
+
+        const fileName = `${userId}.${imageExtensionOf(imageUrl)}`
+        const fileStream = fs.createWriteStream(`frontend/dist/frontend/assets/public/images/uploads/${fileName}`, { flags: 'w' })
+        await finished(Readable.fromWeb(response.body as any).pipe(fileStream))
+
+        const user = await UserModel.findByPk(userId)
+        await user?.update({ profileImage: `/assets/public/images/uploads/${fileName}` })
+      } catch (error) {
+        try {
+          const user = await UserModel.findByPk(userId)
+          await user?.update({ profileImage: imageUrl })
+          logger.warn(`Error retrieving user profile image: ${utils.getErrorMessage(error)}; using image link directly`)
+        } catch (error) {
+          next(error)
+          return
+        }
       }
     }
     res.location(process.env.BASE_PATH + '/profile')
